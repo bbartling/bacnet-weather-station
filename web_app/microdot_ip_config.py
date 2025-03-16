@@ -62,11 +62,13 @@ def write_netplan_config(content):
     log_and_print(f"Configuration written to {NETPLAN_CONFIG}")
 
 def apply_netplan():
-    result = run_command("netplan apply")
+    """Apply Netplan configuration."""
+    result = run_command("sudo /usr/sbin/netplan apply")
     if result is not None:
         log_and_print("Netplan configuration applied successfully.")
     else:
         log_and_print("Failed to apply Netplan configuration.", level="error")
+
 
 def set_static_ip(interface, ip_address, netmask, gateway):
     static_config = f"""
