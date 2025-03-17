@@ -1,0 +1,4 @@
+bacpypes3
+aiohttp
+python-dotenv
+ifaddr
