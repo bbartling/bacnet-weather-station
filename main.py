@@ -30,6 +30,7 @@ def calculate_dew_point(temp_f, humidity):
     dew_point_f = (dew_point_c * 9 / 5) + 32
     return round(dew_point_f, 2)
 
+
 @bacpypes_debugging
 class SampleApplication:
     def __init__(self, args):
@@ -91,11 +92,11 @@ class SampleApplication:
 
     async def fetch_weather(self, session):
         params = {
-            'lat': LAT,
-            'lon': LON,
-            'appid': API_KEY,
-            'units': 'imperial',
-            'lang': 'en'
+            "lat": LAT,
+            "lon": LON,
+            "appid": API_KEY,
+            "units": "imperial",
+            "lang": "en",
         }
 
         async with session.get(API_URL, params=params) as response:
@@ -108,8 +109,8 @@ class SampleApplication:
                 try:
                     data = await self.fetch_weather(session)
 
-                    temperature = data['main'].get('temp', 0.0)
-                    humidity = data['main'].get('humidity', 0.0)
+                    temperature = data["main"].get("temp", 0.0)
+                    humidity = data["main"].get("humidity", 0.0)
                     dew_point = calculate_dew_point(temperature, humidity)
 
                     # Update BACnet objects

@@ -143,15 +143,11 @@ python main.py --name BacnetWeatherStation --address 192.168.0.21/24:47809 --ins
 
 ---
 
-### 🔄 **Step 9: Log Rotation (Optional)**
+### 🖼️ **Step 9: BACnet Weather Station Screenshot**
 
-1. Install `logrotate`:
+Here's a sample screenshot of the BACnet Weather Station in action:
 
-```bash
-sudo apt install logrotate
-```
-
-2. Create a logrotate configuration for the app logs if needed.
+[![BACnet Weather Station Screenshot](https://github.com/bbartling/bacnet-weather-station/blob/develop/images/snip.png)](https://github.com/bbartling/bacnet-weather-station/blob/develop/images/snip.png)
 
 ---
 
