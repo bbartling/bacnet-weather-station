@@ -1,6 +1,6 @@
 # 🐳 **Docker Cheat Sheet for BACnet Weather Station**
 
-This guide covers the essential Docker commands to manage the **BACnet Weather Station** container on your Raspberry Pi.
+This guide covers the essential Docker commands to manage the **BACnet Weather Station** container on your Raspberry Pi. Modify Docker run command as needed with a text editor if there is a requirement to run BACnet app on a different port number.
 
 ---
 
@@ -103,6 +103,31 @@ docker build --no-cache -t bacnet-weather-station .
 ```
 
 ---
+
+## 🛠 ** Modifying the Py file **
+Stopping, removing, rebuilding, and running the app again...
+
+```bash
+docker build -t bacnet-weather-station .
+docker stop bacnet-weather-station
+docker rm bacnet-weather-station
+docker run -d \
+  --name bacnet-weather-station \
+  --env-file .env \
+  --network host \
+  --restart unless-stopped \
+  --log-driver json-file \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  bacnet-weather-station
+```
+
+Then track logs
+```bash
+$ docker logs -f bacnet-weather-station
+```
+
+```
 
 ### ✅ **All Set!**
 

@@ -9,7 +9,10 @@ from bacpypes3.local.analog import AnalogValueObject
 from bacpypes3.local.binary import BinaryValueObject
 from bacpypes3.debugging import bacpypes_debugging, ModuleLogger
 import math
-from config import LAT, LON, API_URL, INTERVAL
+from microdot.asgi import Microdot, Response
+import json
+
+from config import LAT, LON, API_URL, INTERVAL, UNITS, LANG
 
 # Debugging (Follow BACpypes3 standard)
 _debug = 0
@@ -18,6 +21,11 @@ _log = ModuleLogger(globals())
 # Load environment variables from .env
 load_dotenv()
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+# Microdot app for REST endpoint
+api_app = Microdot()
+
+bacnet_app = None
 
 
 def calculate_dew_point(temp_f, humidity):
@@ -31,6 +39,7 @@ def calculate_dew_point(temp_f, humidity):
     return round(dew_point_f, 2)
 
 
+# BACnet Application Class
 @bacpypes_debugging
 class SampleApplication:
     def __init__(self, args):
@@ -41,6 +50,14 @@ class SampleApplication:
 
         # Initialize the BACnet Application
         self.app = Application.from_args(args)
+
+        # Initialize Data Attributes
+        self.current_data = {
+            "temperature": 0.0,
+            "humidity": 0.0,
+            "dew_point": 0.0,
+            "error": "inactive",
+        }
 
         # Define BACnet objects
         self.temp_av = AnalogValueObject(
@@ -95,8 +112,8 @@ class SampleApplication:
             "lat": LAT,
             "lon": LON,
             "appid": API_KEY,
-            "units": "imperial",
-            "lang": "en",
+            "units": UNITS,
+            "lang": LANG,
         }
 
         async with session.get(API_URL, params=params) as response:
@@ -113,26 +130,56 @@ class SampleApplication:
                     humidity = data["main"].get("humidity", 0.0)
                     dew_point = calculate_dew_point(temperature, humidity)
 
-                    # Update BACnet objects
+                    # Update BACnet objects and current data snapshot
                     self.temp_av.presentValue = temperature
                     self.humidity_av.presentValue = humidity
                     self.dew_point_av.presentValue = dew_point
                     self.error_bv.presentValue = "inactive"
 
+                    self.current_data.update(
+                        {
+                            "temperature": temperature,
+                            "humidity": humidity,
+                            "dew_point": dew_point,
+                            "error": "inactive",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
+
                     if _debug:
-                        _log.debug(f"Updated Dry-Bulb Temp: {temperature}")
-                        _log.debug(f"Updated Humidity: {humidity}")
-                        _log.debug(f"Updated Dew Point: {dew_point}")
+                        _log.debug(f"Updated Data: {self.current_data}")
 
                 except Exception as e:
                     _log.error(f"Error fetching or updating weather data: {e}")
                     self.error_bv.presentValue = "active"
+                    self.current_data["error"] = "active"
 
                 await asyncio.sleep(INTERVAL)
 
 
+# REST API Endpoint for Weather Status
+@api_app.get("/status")
+async def status(request):
+    """Return current weather data as JSON."""
+    if bacnet_app is None:
+        return {"error": "BACnet app not initialized"}, 500
+
+    return bacnet_app.current_data
+
+
+# REST API Endpoint for a Friendly Message
+@api_app.get("/")
+async def hello(request):
+    """Return a friendly message with a link to the weather data endpoint."""
+    if bacnet_app is None:
+        return {"error": "BACnet app not initialized"}, 500
+
+    return {"message": "Hello from Microdot! See the /status route for weather data!"}
+
+
+# Main async function
 async def main():
-    global _debug
+    global _debug, bacnet_app
 
     parser = SimpleArgumentParser()
     args = parser.parse_args()
@@ -142,10 +189,11 @@ async def main():
         _log.set_level("DEBUG")
         _log.debug("Debug mode enabled")
 
-    if _debug:
-        _log.debug(f"Parsed arguments: {args}")
+    # Start BACnet app
+    bacnet_app = SampleApplication(args)
 
-    app = SampleApplication(args)
+    # Run Microdot API in the background
+    asyncio.create_task(api_app.start_server(host="0.0.0.0", port=8080))
 
     await asyncio.Future()  # Keep running
 
