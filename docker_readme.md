@@ -124,7 +124,7 @@ docker run -d \
 
 Then track logs
 ```bash
-$ docker logs -f bacnet-weather-station
+docker logs -f bacnet-weather-station
 ```
 
 ```
