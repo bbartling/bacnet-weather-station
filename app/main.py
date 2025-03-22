@@ -179,6 +179,8 @@ class SampleApplication:
                             "wet_bulb": wet_bulb,
                             "error": "inactive",
                             "timestamp": datetime.now().isoformat(),
+                            "lat": LAT,
+                            "lon": LON,
                         }
                     )
 

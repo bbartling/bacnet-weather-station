@@ -225,11 +225,14 @@ curl http://localhost:8080/status
 #### 🔍 **Example JSON Response**
 ```json
 {
-    "temperature": 43.95,
-    "humidity": 45,
-    "dew_point": 24.0,
-    "error": "inactive",
-    "timestamp": "2025-03-18T13:33:00.104584"
+  "temperature": 40.78,
+  "humidity": 32,
+  "dew_point": 13.23,
+  "error": "inactive",
+  "wet_bulb": 31.13,
+  "timestamp": "2025-03-22T18:49:14.725541",
+  "lat": 43.555,
+  "lon": -89.927
 }
 ```
 
