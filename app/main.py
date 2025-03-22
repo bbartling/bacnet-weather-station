@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
 import aiohttp
@@ -9,30 +10,34 @@ from bacpypes3.local.analog import AnalogValueObject
 from bacpypes3.local.binary import BinaryValueObject
 from bacpypes3.debugging import bacpypes_debugging, ModuleLogger
 import math
-from microdot.asgi import Microdot, Response
+from microdot.asgi import Microdot
 import json
 
 from config import LAT, LON, API_URL, INTERVAL, UNITS, LANG
 
-# Debugging (Follow BACpypes3 standard)
+# Debugging
 _debug = 0
 _log = ModuleLogger(globals())
 
-# Load environment variables from .env
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
+try:
+    load_dotenv()
+    API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+    if not API_KEY:
+        raise ValueError("Missing OPENWEATHER_API_KEY in .env or environment variables.")
+
+except Exception as e:
+    _log.error(f"Failed to load API key: {e}")
+    sys.exit(1)
 
 # Microdot app for REST endpoint
 api_app = Microdot()
-
 bacnet_app = None
 
 
 def calculate_wet_bulb(temp_f, humidity):
-    """Estimate wet bulb temp using Stull formula."""
     temp_c = (temp_f - 32) * 5 / 9
     rh = humidity
-
     wet_bulb_c = (
         temp_c * math.atan(0.151977 * math.sqrt(rh + 8.313659))
         + math.atan(temp_c + rh)
@@ -40,13 +45,11 @@ def calculate_wet_bulb(temp_f, humidity):
         + 0.00391838 * rh**1.5 * math.atan(0.023101 * rh)
         - 4.686035
     )
-
     wet_bulb_f = (wet_bulb_c * 9 / 5) + 32
     return round(wet_bulb_f, 2)
 
 
 def calculate_dew_point(temp_f, humidity):
-    """Calculate dew point using Magnus formula."""
     temp_c = (temp_f - 32) * 5 / 9
     a = 17.27
     b = 237.7
@@ -56,27 +59,25 @@ def calculate_dew_point(temp_f, humidity):
     return round(dew_point_f, 2)
 
 
-# BACnet Application Class
 @bacpypes_debugging
 class SampleApplication:
     def __init__(self, args):
-        """Initialize the BACnet application and objects."""
-
         if _debug:
             _log.debug("Initializing SampleApplication")
 
-        # Initialize the BACnet Application
         self.app = Application.from_args(args)
 
-        # Initialize Data Attributes
         self.current_data = {
             "temperature": 0.0,
             "humidity": 0.0,
             "dew_point": 0.0,
+            "wet_bulb": 0.0,
             "error": "inactive",
+            "timestamp": None,
+            "lat": LAT,
+            "lon": LON,
         }
 
-        # Define BACnet objects
         self.temp_av = AnalogValueObject(
             objectIdentifier=("analogValue", 1),
             objectName="oa-dry-bulb",
@@ -125,7 +126,6 @@ class SampleApplication:
             statusFlags=[0, 0, 0, 0],
         )
 
-        # Add objects to BACnet app
         for obj in [
             self.temp_av,
             self.humidity_av,
@@ -136,8 +136,6 @@ class SampleApplication:
             self.app.add_object(obj)
 
         _log.info("BACnet Weather Objects initialized.")
-
-        # Start periodic value updates
         asyncio.create_task(self.update_values())
 
     async def fetch_weather(self, session):
@@ -150,6 +148,8 @@ class SampleApplication:
         }
 
         async with session.get(API_URL, params=params) as response:
+            if response.status == 401:
+                raise ValueError("Unauthorized: Invalid API key for OpenWeatherMap.")
             response.raise_for_status()
             return await response.json()
 
@@ -164,7 +164,6 @@ class SampleApplication:
                     dew_point = calculate_dew_point(temperature, humidity)
                     wet_bulb = calculate_wet_bulb(temperature, humidity)
 
-                    # Update BACnet objects and current data snapshot
                     self.temp_av.presentValue = temperature
                     self.humidity_av.presentValue = humidity
                     self.dew_point_av.presentValue = dew_point
@@ -190,32 +189,29 @@ class SampleApplication:
                 except Exception as e:
                     _log.error(f"Error fetching or updating weather data: {e}")
                     self.error_bv.presentValue = "active"
-                    self.current_data["error"] = "active"
+                    self.current_data["error"] = str(e)
 
                 await asyncio.sleep(INTERVAL)
 
 
-# REST API Endpoint for Weather Status
 @api_app.get("/status")
 async def status(request):
-    """Return current weather data as JSON."""
     if bacnet_app is None:
-        return {"error": "BACnet app not initialized"}, 500
-
+        return {
+            "error": "BACnet app not initialized. Check API key or startup error."
+        }, 500
     return bacnet_app.current_data
 
 
-# REST API Endpoint for a Friendly Message
 @api_app.get("/")
 async def hello(request):
-    """Return a friendly message with a link to the weather data endpoint."""
     if bacnet_app is None:
-        return {"error": "BACnet app not initialized"}, 500
-
+        return {
+            "error": "BACnet app not initialized. Check API key or startup error."
+        }, 500
     return {"message": "Hello from Microdot! See the /status route for weather data!"}
 
 
-# Main async function
 async def main():
     global _debug, bacnet_app
 
@@ -227,13 +223,14 @@ async def main():
         _log.set_level("DEBUG")
         _log.debug("Debug mode enabled")
 
-    # Start BACnet app
-    bacnet_app = SampleApplication(args)
+    try:
+        bacnet_app = SampleApplication(args)
+    except Exception as e:
+        _log.error(f"BACnet app failed to initialize: {e}")
+        return
 
-    # Run Microdot API in the background
     asyncio.create_task(api_app.start_server(host="0.0.0.0", port=8080))
-
-    await asyncio.Future()  # Keep running
+    await asyncio.Future()
 
 
 if __name__ == "__main__":
@@ -242,3 +239,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         _log.info("Keyboard interrupt received, shutting down.")
         sys.exit(0)
+    except RuntimeError as e:
+        _log.error(f"Runtime error: {e}")
+        sys.exit(1)
