@@ -31,4 +31,4 @@ ENV BACNET_IP=0.0.0.0
 EXPOSE 47808/udp
 
 # Run the app
-CMD ["python", "main.py", "--name", "BacnetWeatherStation", "--instance", "3456789"]
+CMD ["python", "main.py", "--name", "BacnetWeatherStation", "--instance", "3456789", "--debug"]

@@ -28,6 +28,23 @@ api_app = Microdot()
 bacnet_app = None
 
 
+def calculate_wet_bulb(temp_f, humidity):
+    """Estimate wet bulb temp using Stull formula."""
+    temp_c = (temp_f - 32) * 5 / 9
+    rh = humidity
+
+    wet_bulb_c = (
+        temp_c * math.atan(0.151977 * math.sqrt(rh + 8.313659))
+        + math.atan(temp_c + rh)
+        - math.atan(rh - 1.676331)
+        + 0.00391838 * rh**1.5 * math.atan(0.023101 * rh)
+        - 4.686035
+    )
+
+    wet_bulb_f = (wet_bulb_c * 9 / 5) + 32
+    return round(wet_bulb_f, 2)
+
+
 def calculate_dew_point(temp_f, humidity):
     """Calculate dew point using Magnus formula."""
     temp_c = (temp_f - 32) * 5 / 9
@@ -90,6 +107,16 @@ class SampleApplication:
             description="Web Weather Outside Air Dew Point Temp",
         )
 
+        self.wet_bulb_av = AnalogValueObject(
+            objectIdentifier=("analogValue", 4),
+            objectName="oa-wet-bulb",
+            presentValue=0.0,
+            statusFlags=[0, 0, 0, 0],
+            covIncrement=1.0,
+            units="degreesFahrenheit",
+            description="Web Weather Outside Air Wet Bulb Temp",
+        )
+
         self.error_bv = BinaryValueObject(
             objectIdentifier=("binaryValue", 1),
             objectName="web-api-error",
@@ -99,7 +126,13 @@ class SampleApplication:
         )
 
         # Add objects to BACnet app
-        for obj in [self.temp_av, self.humidity_av, self.dew_point_av, self.error_bv]:
+        for obj in [
+            self.temp_av,
+            self.humidity_av,
+            self.dew_point_av,
+            self.wet_bulb_av,
+            self.error_bv,
+        ]:
             self.app.add_object(obj)
 
         _log.info("BACnet Weather Objects initialized.")
@@ -129,11 +162,13 @@ class SampleApplication:
                     temperature = data["main"].get("temp", 0.0)
                     humidity = data["main"].get("humidity", 0.0)
                     dew_point = calculate_dew_point(temperature, humidity)
+                    wet_bulb = calculate_wet_bulb(temperature, humidity)
 
                     # Update BACnet objects and current data snapshot
                     self.temp_av.presentValue = temperature
                     self.humidity_av.presentValue = humidity
                     self.dew_point_av.presentValue = dew_point
+                    self.wet_bulb_av.presentValue = wet_bulb
                     self.error_bv.presentValue = "inactive"
 
                     self.current_data.update(
@@ -141,6 +176,7 @@ class SampleApplication:
                             "temperature": temperature,
                             "humidity": humidity,
                             "dew_point": dew_point,
+                            "wet_bulb": wet_bulb,
                             "error": "inactive",
                             "timestamp": datetime.now().isoformat(),
                         }
