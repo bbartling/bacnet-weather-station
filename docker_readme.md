@@ -6,6 +6,16 @@ This guide covers the essential Docker commands to manage the **BACnet Weather S
 
 ## 🚀 **Build the Docker Image**
 
+Install Docker if need be
+
+```bash
+# Install Docker
+curl -sSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+Build container
+
 ```bash
 docker build -t bacnet-weather-station .
 ```
